@@ -10,6 +10,8 @@ import logging
 import os
 
 from mcp.server.fastmcp import FastMCP
+from starlette.responses import PlainTextResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .auth.bearer import bearer_auth_middleware
 from .tools import metadata, reviews, search
@@ -52,6 +54,23 @@ def _build_http_app():
     return factory(**kwargs)
 
 
+def healthz_middleware(app: ASGIApp) -> ASGIApp:
+    """Answer GET /healthz with 200 OK before delegating to FastMCP.
+
+    FastMCP doesn't mount a health endpoint, but the Dockerfile HEALTHCHECK
+    (and HF Spaces' liveness probe) call /healthz. Without this, containers
+    are marked unhealthy and restarted.
+    """
+    async def middleware(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope.get("path") == "/healthz":
+            response = PlainTextResponse("ok")
+            await response(scope, receive, send)
+            return
+        await app(scope, receive, send)
+
+    return middleware
+
+
 def main() -> None:
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO"),
@@ -64,6 +83,7 @@ def main() -> None:
 
     app = _build_http_app()
     app = bearer_auth_middleware(app)
+    app = healthz_middleware(app)
 
     import uvicorn
     uvicorn.run(
