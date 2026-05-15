@@ -5,7 +5,6 @@ Run: python -m appstore_intel_mcp
 """
 from __future__ import annotations
 
-import inspect
 import logging
 import os
 
@@ -34,24 +33,18 @@ reviews.register(mcp)
 
 
 def _build_http_app():
-    """Build the Streamable HTTP ASGI app, disabling DNS rebinding
-    protection if this SDK version supports the kwarg. HF proxies through
-    a public hostname which FastMCP's default Host check rejects with 421.
-    Bearer auth remains the real security boundary.
+    """Build the Streamable HTTP ASGI app with DNS rebinding protection
+    disabled. HF proxies through a public hostname which FastMCP's default
+    Host check rejects with 421. Bearer auth remains the real security
+    boundary, so disabling the host check is safe here.
     """
-    factory = mcp.streamable_http_app
-    sig = inspect.signature(factory)
-    kwargs = {}
-    for name in (
-        "dns_rebinding_protection",
-        "streamable_http_dns_rebinding_protection",
-        "disable_host_check",
-    ):
-        if name in sig.parameters:
-            kwargs[name] = False if "disable" not in name else True
-            log.info("Using %s=%s on streamable_http_app", name, kwargs[name])
-            break
-    return factory(**kwargs)
+    try:
+        from mcp.server.transport_security import TransportSecuritySettings
+        security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+        return mcp.streamable_http_app(transport_security=security)
+    except (ImportError, TypeError):
+        log.warning("transport_security not supported in this SDK; using default")
+        return mcp.streamable_http_app()
 
 
 def healthz_middleware(app: ASGIApp) -> ASGIApp:
