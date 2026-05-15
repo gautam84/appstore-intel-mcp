@@ -37,7 +37,11 @@ def bearer_auth_middleware(app: ASGIApp) -> ASGIApp:
         # for routes it doesn't define). Auth-gating discovery endpoints
         # makes well-behaved MCP clients fail OAuth negotiation.
         path = scope.get("path", "")
-        if path == "/healthz" or path.startswith("/.well-known/"):
+        if (
+            path == "/healthz"
+            or path == "/register"
+            or path.startswith("/.well-known/")
+        ):
             await app(scope, receive, send)
             return
 
