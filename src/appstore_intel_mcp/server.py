@@ -9,6 +9,7 @@ import logging
 import os
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -17,6 +18,9 @@ from .tools import metadata, reviews, search
 
 log = logging.getLogger(__name__)
 
+# HF proxies through a public hostname; FastMCP's default Host check rejects
+# it with 421. Bearer auth is the real security boundary, so disabling the
+# DNS-rebinding host check at the transport layer is safe here.
 mcp = FastMCP(
     name="appstore-intel",
     instructions=(
@@ -24,6 +28,7 @@ mcp = FastMCP(
         "reviews, and competitive intelligence. Use search_apps to find "
         "an app's identifier, then call get_app_metadata or get_reviews."
     ),
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
 # Register tools.
@@ -33,18 +38,7 @@ reviews.register(mcp)
 
 
 def _build_http_app():
-    """Build the Streamable HTTP ASGI app with DNS rebinding protection
-    disabled. HF proxies through a public hostname which FastMCP's default
-    Host check rejects with 421. Bearer auth remains the real security
-    boundary, so disabling the host check is safe here.
-    """
-    try:
-        from mcp.server.transport_security import TransportSecuritySettings
-        security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
-        return mcp.streamable_http_app(transport_security=security)
-    except (ImportError, TypeError):
-        log.warning("transport_security not supported in this SDK; using default")
-        return mcp.streamable_http_app()
+    return mcp.streamable_http_app()
 
 
 def healthz_middleware(app: ASGIApp) -> ASGIApp:
