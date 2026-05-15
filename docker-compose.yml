@@ -1,0 +1,9 @@
+services:
+  mcp:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=DEBUG
+      - API_KEYS=${API_KEYS:-}
+    restart: unless-stopped
