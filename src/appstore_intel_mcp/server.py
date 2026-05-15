@@ -24,6 +24,19 @@ mcp = FastMCP(
     ),
 )
 
+# FastMCP enables DNS rebinding protection by default, which restricts
+# the Host header to localhost. HF Spaces proxies requests through their
+# public hostname, so the protection must be disabled here. Bearer auth
+# remains the real security boundary.
+try:
+    mcp.settings.streamable_http_dns_rebinding_protection = False
+except AttributeError:
+    # Older/newer SDK versions: setting may live elsewhere. Fall back to
+    # the env var that FastMCP also reads on init.
+    os.environ.setdefault(
+        "FASTMCP_STREAMABLE_HTTP_DNS_REBINDING_PROTECTION", "false"
+    )
+
 # Register tools. Each module exposes a `register(mcp)` function so the
 # server module stays a thin composition root.
 search.register(mcp)
@@ -42,28 +55,16 @@ def main() -> None:
         return
 
     app = mcp.streamable_http_app()
-
-    # HF Spaces proxies requests; the Host header is the public hostname.
-    # Wrap with TrustedHostMiddleware to allow it through FastMCP's checks.
-    from starlette.middleware.trustedhost import TrustedHostMiddleware
-    
-    allowed = os.getenv(
-        "ALLOWED_HOSTS",
-        "gautam84-appstore-intel-mcp.hf.space,localhost,127.0.0.1,0.0.0.0",
-    )
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=[h.strip() for h in allowed.split(",") if h.strip()],
-    )
-
     app = bearer_auth_middleware(app)
 
     import uvicorn
     uvicorn.run(
         app,
         host=os.getenv("HOST", "0.0.0.0"),
-        port=int(os.getenv("PORT", "8000")),
+        port=int(os.getenv("PORT", "7860")),
         log_level=os.getenv("LOG_LEVEL", "info").lower(),
     )
+
+
 if __name__ == "__main__":
     main()
