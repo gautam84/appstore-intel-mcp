@@ -25,7 +25,7 @@ A remote MCP server that gives AI agents structured access to **Google Play** an
 ## Quickstart (local)
 
 ```bash
-git clone https://github.com/<you>/appstore-intel-mcp
+git clone https://github.com/gautam84/appstore-intel-mcp
 cd appstore-intel-mcp
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
