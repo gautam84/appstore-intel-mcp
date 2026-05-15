@@ -33,9 +33,11 @@ def bearer_auth_middleware(app: ASGIApp) -> ASGIApp:
             await app(scope, receive, send)
             return
 
-        # Allow unauthenticated discovery endpoints
+        # Allow unauthenticated probes through to the app (which returns 404
+        # for routes it doesn't define). Auth-gating discovery endpoints
+        # makes well-behaved MCP clients fail OAuth negotiation.
         path = scope.get("path", "")
-        if path in {"/healthz", "/.well-known/oauth-protected-resource"}:
+        if path == "/healthz" or path.startswith("/.well-known/"):
             await app(scope, receive, send)
             return
 
