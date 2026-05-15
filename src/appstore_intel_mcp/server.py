@@ -5,6 +5,7 @@ Run: python -m appstore_intel_mcp
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 
@@ -24,24 +25,31 @@ mcp = FastMCP(
     ),
 )
 
-# FastMCP enables DNS rebinding protection by default, which restricts
-# the Host header to localhost. HF Spaces proxies requests through their
-# public hostname, so the protection must be disabled here. Bearer auth
-# remains the real security boundary.
-try:
-    mcp.settings.streamable_http_dns_rebinding_protection = False
-except AttributeError:
-    # Older/newer SDK versions: setting may live elsewhere. Fall back to
-    # the env var that FastMCP also reads on init.
-    os.environ.setdefault(
-        "FASTMCP_STREAMABLE_HTTP_DNS_REBINDING_PROTECTION", "false"
-    )
-
-# Register tools. Each module exposes a `register(mcp)` function so the
-# server module stays a thin composition root.
+# Register tools.
 search.register(mcp)
 metadata.register(mcp)
 reviews.register(mcp)
+
+
+def _build_http_app():
+    """Build the Streamable HTTP ASGI app, disabling DNS rebinding
+    protection if this SDK version supports the kwarg. HF proxies through
+    a public hostname which FastMCP's default Host check rejects with 421.
+    Bearer auth remains the real security boundary.
+    """
+    factory = mcp.streamable_http_app
+    sig = inspect.signature(factory)
+    kwargs = {}
+    for name in (
+        "dns_rebinding_protection",
+        "streamable_http_dns_rebinding_protection",
+        "disable_host_check",
+    ):
+        if name in sig.parameters:
+            kwargs[name] = False if "disable" not in name else True
+            log.info("Using %s=%s on streamable_http_app", name, kwargs[name])
+            break
+    return factory(**kwargs)
 
 
 def main() -> None:
@@ -54,7 +62,7 @@ def main() -> None:
         mcp.run(transport="stdio")
         return
 
-    app = mcp.streamable_http_app()
+    app = _build_http_app()
     app = bearer_auth_middleware(app)
 
     import uvicorn
